@@ -19,6 +19,14 @@ def initialize_library():
     """
     cursor.execute(create_table)
 
+    title = input("Enter title name: ")
+    author = input("Enter author name: ")
+
+    query = """
+    INSERT INTO BOOKS(title, author, available)
+    VALUES (?, ?, ?)"""
+
+    cursor.execute(query,(title,author,1))
     # 4. Commit and close
     conn.commit()
     conn.close()
@@ -26,5 +34,3 @@ def initialize_library():
 
 if __name__ == "__main__":
     initialize_library()
-
-
