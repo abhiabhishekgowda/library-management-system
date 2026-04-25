@@ -79,6 +79,26 @@ def borrow_book():
             conn.commit()
             print(f"Book with ID {book_id} has been borrowed successfully.")
 
+def return_book():
+    try:
+        book_id = int(input("\nEnter the ID of the book you are retunning:  "))
+    except ValueError:
+        print("Invalid input. Please enter a number return.")
+        return
+    with sqlite3.connect("library.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT available FROM BOOKS WHERE id = ?",(book_id,))
+        row = cursor.fetchone()
+
+        if row is None:
+            print(f"No book found with that ID: {book_id}")
+        elif row[0] == 1:
+            print(f"this book (ID {book_id}) is alredy in the library. no need to return it.")
+        else:
+            cursor.execute("UPDATE BOOKS SET available = 1 WHERE id = ?",(book_id,))
+            conn.commit()
+            print(f"SUCCESS! Book ID: {book_id} has been retured and is now available.")
+
 def main():
     create_database()
     while True:
@@ -87,9 +107,10 @@ def main():
         print("2. View All Books")
         print("3. Search Books")
         print("4. Borrow Book")
-        print("5. Exit")
+        print("5. return books")
+        print("6. Exit")
 
-        choice = input("Enter your choice (1-5): ")
+        choice = input("Enter your choice (1-6): ")
 
         if choice == "1":
             add_book()
@@ -100,6 +121,8 @@ def main():
         elif choice == "4":
             borrow_book()
         elif choice == "5":
+            return_book()
+        elif choice == "6":
             print("Exiting the library system. Goodbye!")
             break
         else:
