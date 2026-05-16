@@ -4,196 +4,202 @@ from datetime import datetime
 DB_NAME = "library.db"
 
 def create_database():
+    """Create the books table if it does not exist."""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        create_table = """
-            CREATE TABLE IF NOT EXISTS BOOKS(
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS books (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             author TEXT NOT NULL,
-            available INTEGER DEFAULT 1)
-        """
-        cursor.execute(create_table)
+            available INTEGER DEFAULT 1
+        )
+        """)
         conn.commit()
 
 def migrate_schema():
+    """Add extra columns if they do not exist."""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        # Add timestamp column
-        try:
-            cursor.execute("ALTER TABLE BOOKS ADD COLUMN timestamp TEXT")
-        except sqlite3.OperationalError:
-            pass
-        # Add borrowed_date column
-        try:
-            cursor.execute("ALTER TABLE BOOKS ADD COLUMN borrowed_date TEXT")
-        except sqlite3.OperationalError:
-            pass
-        # Add returned_date column
-        try:
-            cursor.execute("ALTER TABLE BOOKS ADD COLUMN returned_date TEXT")
-        except sqlite3.OperationalError:
-            pass
+        for column in ["timestamp TEXT", "borrowed_date TEXT", "returned_date TEXT"]:
+            try:
+                cursor.execute(f"ALTER TABLE books ADD COLUMN {column}")
+            except sqlite3.OperationalError:
+                pass
         conn.commit()
 
-def get_datetime():
+def get_date_time():
+    """Return current date and time as string."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def add_book():
-    title = input("Enter Title Name: ").strip()
-    author = input("Enter Author Name: ").strip()
+    title = input("Enter book title: ").strip()
+    author = input("Enter author name: ").strip()
 
     if not title or not author:
         print("Title and Author cannot be empty.")
         return
 
-    now = get_datetime()
+    now = get_date_time()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        query = "INSERT INTO BOOKS (title, author, available, timestamp) VALUES (?,?,?,?)"
-        cursor.execute(query, (title, author, 1, now))
+        cursor.execute("INSERT INTO books (title, author, available, timestamp) VALUES (?, ?, ?, ?)",
+                       (title, author, 1, now))
         conn.commit()
-        print(f"Title: {title} | Author: {author} | Added: {now} successfully.")
+        print(f"Book '{title}' by {author} added successfully at {now}.")
 
 def view_all_books():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM BOOKS")
+        cursor.execute("SELECT * FROM books")
         rows = cursor.fetchall()
 
-        print("\n----- LIST OF BOOKS -----")
+        print("\n--- All Books ---")
         if not rows:
-            print("The library is empty.")
+            print("Library is currently empty.")
         else:
             for row in rows:
                 status = "Available" if row[3] == 1 else "Borrowed"
-                added = row[4] if row[4] else "Not recorded"
-                borrowed = row[5] if row[5] else "Never borrowed"
-                returned = row[6] if row[6] else "Never returned"
+                added = row[4] or "Not recorded"
+                borrowed = row[5] or "Never borrowed"
+                returned = row[6] or "Never returned"
 
                 print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Status: {status}")
                 print(f"   Added: {added} | Borrowed: {borrowed} | Returned: {returned}")
 
-def search_book():
-    keyword = input("Enter Title or Author to search: ").strip()
+def view_borrowed_books():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        query = "SELECT * FROM BOOKS WHERE title LIKE ? OR author LIKE ?"
-        cursor.execute(query, (f"%{keyword}%", f"%{keyword}%"))
+        cursor.execute("SELECT * FROM books WHERE available = 0")
         rows = cursor.fetchall()
 
-        print("\n----- SEARCH RESULTS -----")
+        print("\n--- Borrowed Books ---")
         if not rows:
-            print(f"No book found with that name: {keyword}")
+            print("No books are currently borrowed.")
+        else:
+            for row in rows:
+                borrowed = row[5] or "Never borrowed"
+                print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed}")
+
+def search_books():
+    keyword = input("Enter title or author to search: ").strip()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM books WHERE title LIKE ? OR author LIKE ?", 
+                       (f"%{keyword}%", f"%{keyword}%"))
+        rows = cursor.fetchall()
+
+        print("\n--- Search Results ---")
+        if not rows:
+            print(f"No books found matching: {keyword}")
         else:
             for row in rows:
                 status = "Available" if row[3] == 1 else "Borrowed"
-                added = row[4] if row[4] else "Not recorded"
-                borrowed = row[5] if row[5] else "Never borrowed"
-                returned = row[6] if row[6] else "Never returned"
-
                 print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Status: {status}")
-                print(f"   Added: {added} | Borrowed: {borrowed} | Returned: {returned}")
 
 def borrow_book():
     try:
-        book_id = int(input("Enter the Book ID you want to borrow: "))
+        book_id = int(input("Enter the Book ID to borrow: "))
     except ValueError:
-        print("Invalid input. Please enter a valid ID (number).")
+        print("Invalid input. Please enter a number.")
         return
 
-    now = get_datetime()
+    now = get_date_time()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT available FROM BOOKS WHERE id = ?", (book_id,))
+        cursor.execute("SELECT available, title, author FROM books WHERE id = ?", (book_id,))
         row = cursor.fetchone()
 
         if row is None:
-            print(f"No book found with ID: {book_id}")
+            print(f"No book found with ID {book_id}.")
         elif row[0] == 0:
-            print(f"Book ID {book_id} is already borrowed.")
+            print(f"Book '{row[1]}' is already borrowed.")
         else:
-            cursor.execute("UPDATE BOOKS SET available = 0, borrowed_date = ? WHERE id = ?", (now, book_id))
+            cursor.execute("UPDATE books SET available = 0 ,borrowed_date = ? WHERE id = ?", (now, book_id))
             conn.commit()
-            print(f"Book ID {book_id} has been successfully borrowed at {now}.")
+            print(f"borrowed '{row[1]}' by {row[2]} at {now}.")
 
 def return_book():
     try:
-        book_id = int(input("Enter the Book ID you want to return: "))
+        book_id = int(input("Enter the Book ID to return: "))
     except ValueError:
-        print("Invalid input. Please enter a valid ID (number).")
+        print("Invalid input. Please enter a number.")
         return
 
-    now = get_datetime()
+    now = get_date_time()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT available FROM BOOKS WHERE id = ?", (book_id,))
+        cursor.execute("SELECT available, title, author FROM books WHERE id = ?", (book_id,))
         row = cursor.fetchone()
 
         if row is None:
-            print(f"No book found with ID: {book_id}")
+            print(f"No book found with ID {book_id}.")
         elif row[0] == 1:
-            print(f"Book ID {book_id} is already available. No need to return.")
+            print(f"Book '{row[1]}' is already available.")
         else:
-            cursor.execute("UPDATE BOOKS SET available = 1, returned_date = ? WHERE id = ?", (now, book_id))
+            cursor.execute("UPDATE books SET available = 1, returned_date = ? WHERE id = ?", (now, book_id))
             conn.commit()
-            print(f"Book ID {book_id} has been successfully returned at {now}.")
+            print(f"You returned '{row[1]}' by {row[2]} at {now}.")
 
 def delete_book():
     try:
-        book_id = int(input("Enter the Book ID you want to delete: "))
+        book_id = int(input("Enter the Book ID to delete: "))
     except ValueError:
-        print("Invalid input. Please enter a valid ID (number).")
+        print("Invalid input. Please enter a number.")
         return
 
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM BOOKS WHERE id = ?", (book_id,))
+        cursor.execute("SELECT * FROM books WHERE id = ?", (book_id,))
         row = cursor.fetchone()
 
         if row is None:
-            print(f"No book found with ID: {book_id}")
+            print(f"No book found with ID {book_id}.")
+        elif row[3] == 0:
+            print(f"Book '{row[1]}' is borrowed. Cannot delete borrowed books.")
         else:
-            user_confirmation = input(f"Are you sure you want to delete book ID {book_id}? (yes/no): ").strip().lower()
-            if user_confirmation in ["yes", "y"]:
-                cursor.execute("DELETE FROM BOOKS WHERE id = ?", (book_id,))
+            confirm = input(f"Are you sure you want to delete '{row[1]}'? (yes/no): ").strip().lower()
+            if confirm in ["yes", "y"]:
+                cursor.execute("DELETE FROM books WHERE id = ?", (book_id,))
                 conn.commit()
-                print(f"Book ID {book_id} has been successfully deleted.")
+                print(f"Book '{row[1]}' deleted successfully.")
             else:
-                print("Deletion cancelled. The book was not deleted.")
+                print("Deletion cancelled.")
 
 def main():
     create_database()
     migrate_schema()
     while True:
         print("\n--- Library Menu ---")
-        print("1. Add Book")
+        print("1. Add a Book")
         print("2. View All Books")
-        print("3. Search Books")
-        print("4. Borrow Book")
-        print("5. Return Book")
-        print("6. Delete Book")
-        print("7. Exit")
+        print("3. View Borrowed Books")
+        print("4. Search Books")
+        print("5. Borrow a Book")
+        print("6. Return a Book")
+        print("7. Delete a Book")
+        print("8. Exit")
 
-        choice = input("Enter your choice (1-7): ").strip()
-
+        choice = input("Enter your choice (1-8): ").strip()
         if choice == "1":
             add_book()
         elif choice == "2":
             view_all_books()
         elif choice == "3":
-            search_book()
+            view_borrowed_books()
         elif choice == "4":
-            borrow_book()
+            search_books()
         elif choice == "5":
-            return_book()
+            borrow_book()
         elif choice == "6":
-            delete_book()
+            return_book()
         elif choice == "7":
+            delete_book()
+        elif choice == "8":
             print("Exiting the library system. Goodbye!")
             break
         else:
-            print("Invalid choice. Please enter a number between 1 and 7.")
+            print("Invalid choice. Please enter a number between 1 and 8.")
 
 if __name__ == "__main__":
     main()
