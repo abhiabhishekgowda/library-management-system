@@ -21,7 +21,7 @@ def migrate_schema():
     """Add extra columns if they do not exist."""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        for column in ["timestamp TEXT", "borrowed_date TEXT", "returned_date TEXT"]:
+        for column in ["timestamp TEXT", "borrowed_date TEXT", "returned_date TEXT","borrowed_by TEXT"]:
             try:
                 cursor.execute(f"ALTER TABLE books ADD COLUMN {column}")
             except sqlite3.OperationalError:
@@ -63,9 +63,11 @@ def view_all_books():
                 added = row[4] or "Not recorded"
                 borrowed = row[5] or "Never borrowed"
                 returned = row[6] or "Never returned"
+                borrowed_by = row[7] or "N/A"
 
                 print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Status: {status}")
                 print(f"   Added: {added} | Borrowed: {borrowed} | Returned: {returned}")
+                print(f"   Borrowed by: {borrowed_by}")
 
 def view_borrowed_books():
     with sqlite3.connect(DB_NAME) as conn:
@@ -79,7 +81,8 @@ def view_borrowed_books():
         else:
             for row in rows:
                 borrowed = row[5] or "Never borrowed"
-                print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed}")
+                borrowed_by = row[7] or "Unknown"
+                print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed} | Borrowed by: {borrowed_by}")
 
 def search_books():
     keyword = input("Enter title or author to search: ").strip()
@@ -103,7 +106,7 @@ def borrow_book():
     except ValueError:
         print("Invalid input. Please enter a number.")
         return
-
+    user_name = input("Enter Your Name: ").strip()
     now = get_date_time()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
@@ -115,9 +118,9 @@ def borrow_book():
         elif row[0] == 0:
             print(f"Book '{row[1]}' is already borrowed.")
         else:
-            cursor.execute("UPDATE books SET available = 0 ,borrowed_date = ? WHERE id = ?", (now, book_id))
+            cursor.execute("UPDATE books SET available = 0 ,borrowed_date = ?, borrowed_by = ? WHERE id = ?", (now, user_name, book_id))
             conn.commit()
-            print(f"borrowed '{row[1]}' by {row[2]} at {now}.")
+            print(f"{user_name} borrowed '{row[1]}' by {row[2]} at {now}.")
 
 def return_book():
     try:
@@ -129,7 +132,7 @@ def return_book():
     now = get_date_time()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT available, title, author FROM books WHERE id = ?", (book_id,))
+        cursor.execute("SELECT available, title, author, borrowed_by FROM books WHERE id = ?", (book_id,))
         row = cursor.fetchone()
 
         if row is None:
@@ -137,9 +140,9 @@ def return_book():
         elif row[0] == 1:
             print(f"Book '{row[1]}' is already available.")
         else:
-            cursor.execute("UPDATE books SET available = 1, returned_date = ? WHERE id = ?", (now, book_id))
+            cursor.execute("UPDATE books SET available = 1, returned_date = ?, borrowed_by = NULL WHERE id = ?", (now, book_id))
             conn.commit()
-            print(f"You returned '{row[1]}' by {row[2]} at {now}.")
+            print(f"{row[3]} returned '{row[1]}' by {row[2]} at {now}.")
 
 def delete_book():
     try:
@@ -166,6 +169,22 @@ def delete_book():
             else:
                 print("Deletion cancelled.")
 
+def view_books_by_user():
+    user_name = input("Enter user name: ").strip()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM books WHERE borrowed_by = ?", (user_name,))
+        rows = cursor.fetchall()
+
+        print(f"\n--- Books borrowed by {user_name} ---")
+        if not rows:
+            print(f"{user_name} has not borrowed any books.")
+        else:
+            for row in rows:
+                borrowed = row[5] or "Never borrowed"
+                print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed}")
+
+
 def main():
     create_database()
     migrate_schema()
@@ -178,9 +197,10 @@ def main():
         print("5. Borrow a Book")
         print("6. Return a Book")
         print("7. Delete a Book")
-        print("8. Exit")
+        print("8. View Books by User")
+        print("9. Exit")
 
-        choice = input("Enter your choice (1-8): ").strip()
+        choice = input("Enter your choice (1-9): ").strip()
         if choice == "1":
             add_book()
         elif choice == "2":
@@ -196,10 +216,13 @@ def main():
         elif choice == "7":
             delete_book()
         elif choice == "8":
+            view_books_by_user()
+        elif choice == "9":
             print("Exiting the library system. Goodbye!")
             break
         else:
-            print("Invalid choice. Please enter a number between 1 and 8.")
+            print("Invalid choice. Please enter a number between 1 and 9.")
 
 if __name__ == "__main__":
     main()
+
