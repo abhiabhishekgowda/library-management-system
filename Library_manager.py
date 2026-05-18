@@ -19,12 +19,19 @@ def create_database():
 
 def migrate_schema():
     """Add extra columns if they do not exist."""
+    columns = {
+        "timestamp": "TEXT",
+        "borrowed_date": "TEXT",
+        "returned_date": "TEXT",
+        "borrowed_by": "TEXT"
+    }
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        for column in ["timestamp TEXT", "borrowed_date TEXT", "returned_date TEXT","borrowed_by TEXT"]:
+        for col, col_type in columns.items():
             try:
-                cursor.execute(f"ALTER TABLE books ADD COLUMN {column}")
+                cursor.execute(f"ALTER TABLE books ADD COLUMN {col} {col_type}")
             except sqlite3.OperationalError:
+                # Column already exists
                 pass
         conn.commit()
 
@@ -80,8 +87,8 @@ def view_borrowed_books():
             print("No books are currently borrowed.")
         else:
             for row in rows:
-                borrowed = row[5] or "Never borrowed"
-                borrowed_by = row[7] or "Unknown"
+                borrowed = row[5] or "Unknown date"
+                borrowed_by = row[7] or "Unknown user"
                 print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed} | Borrowed by: {borrowed_by}")
 
 def search_books():
@@ -181,9 +188,8 @@ def view_books_by_user():
             print(f"{user_name} has not borrowed any books.")
         else:
             for row in rows:
-                borrowed = row[5] or "Never borrowed"
+                borrowed = row[5] or "Unknown date"
                 print(f"ID: {row[0]} | Title: {row[1]} | Author: {row[2]} | Borrowed at: {borrowed}")
-
 
 def main():
     create_database()
@@ -225,4 +231,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
